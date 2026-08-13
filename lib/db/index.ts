@@ -74,7 +74,7 @@ export async function inspectSchema(): Promise<SchemaStatus> {
     select table_name
     from information_schema.tables
     where table_schema = 'public'
-      and table_name in ('shops', 'sales', 'expenses', 'employees', 'salary_payments')
+      and table_name in ('shops', 'sales', 'expenses', 'employees', 'salary_payments', 'telegram_links', 'telegram_link_codes')
   `) as Array<{ table_name: string }>;
   const present = new Set(rows.map((row) => row.table_name));
   const missing = REQUIRED_TABLES.filter((table) => !present.has(table));

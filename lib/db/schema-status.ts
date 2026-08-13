@@ -1,7 +1,15 @@
 import { join } from "node:path";
 import { DatabaseConfigError } from "./errors";
 
-export const REQUIRED_TABLES = ["shops", "sales", "expenses", "employees", "salary_payments"] as const;
+export const REQUIRED_TABLES = [
+  "shops",
+  "sales",
+  "expenses",
+  "employees",
+  "salary_payments",
+  "telegram_links",
+  "telegram_link_codes",
+] as const;
 
 export type SchemaStatus = {
   ready: boolean;

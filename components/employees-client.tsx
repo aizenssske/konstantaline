@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "./page-header";
 import { useShop } from "./shop-context";
+import { MoneyInput } from "./money-input";
 import { Button, EmptyState, Field, LoadingBlock, Modal } from "./ui";
 import { currentMonthTashkent, formatMoney, todayTashkent } from "@/lib/format";
 import type { Employee, PaymentType, SalaryPayment } from "@/lib/types";
@@ -116,7 +117,7 @@ export function EmployeesClient() {
           <Field label="Lavozim"><input name="role" placeholder="Masalan: sotuvchi" required /></Field>
           <Field label="Telefon"><input name="phone" placeholder="+998 90 123 45 67" /></Field>
           <Field label="Ishga kirgan sana"><input name="hired_at" type="date" defaultValue={todayTashkent()} required /></Field>
-          <div className="full"><Field label="Oylik maosh"><div className="currency-input"><input name="monthly_salary" type="number" min="1" step="1000" required /><span>so‘m</span></div></Field></div>
+          <div className="full"><Field label="Oylik maosh"><MoneyInput name="monthly_salary" required /></Field></div>
         </div><div className="form-actions"><Button type="button" variant="secondary" onClick={() => setEmployeeOpen(false)}>Bekor qilish</Button><Button type="submit" disabled={saving}><Plus size={15} />{saving ? "Saqlanmoqda..." : "Ishchini saqlash"}</Button></div></form>
       </Modal>
 

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -125,10 +126,43 @@ export const salaryPayments = pgTable(
   ],
 );
 
+export const telegramLinks = pgTable(
+  "telegram_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    telegram_id: bigint("telegram_id", { mode: "number" }).notNull().unique(),
+    username: text("username").notNull().default(""),
+    first_name: text("first_name").notNull().default(""),
+    linked_at: timestamp("linked_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+    ...timestamps,
+  },
+  (table) => [index("telegram_links_telegram_id_idx").on(table.telegram_id)],
+);
+
+export const telegramLinkCodes = pgTable(
+  "telegram_link_codes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    code: text("code").notNull().unique(),
+    telegram_id: bigint("telegram_id", { mode: "number" }).notNull(),
+    username: text("username").notNull().default(""),
+    first_name: text("first_name").notNull().default(""),
+    expires_at: timestamp("expires_at", { withTimezone: true, mode: "string" }).notNull(),
+    used_at: timestamp("used_at", { withTimezone: true, mode: "string" }),
+    ...timestamps,
+  },
+  (table) => [
+    index("telegram_link_codes_telegram_idx").on(table.telegram_id),
+    index("telegram_link_codes_expires_idx").on(table.expires_at),
+  ],
+);
+
 export const schema = {
   shops,
   sales,
   expenses,
   employees,
   salaryPayments,
+  telegramLinks,
+  telegramLinkCodes,
 };

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   Bell,
+  Bot,
   Building2,
   ChevronDown,
   CircleDollarSign,
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/expenses", label: "Xarajatlar", icon: ReceiptText },
   { href: "/employees", label: "Ishchilar", icon: Users },
   { href: "/reports", label: "Hisobotlar", icon: BarChart3 },
+  { href: "/bot", label: "Telegram bot", icon: Bot },
   { href: "/settings", label: "Sozlamalar", icon: Settings },
 ];
 

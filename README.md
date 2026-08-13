@@ -215,5 +215,9 @@ Bot uchun endpointlar:
 - `POST /api/bot/expenses`
 - `GET /api/bot/employees?shop_id=...`
 - `POST /api/bot/salary-payments`
+- `POST /api/bot/link-codes` — Telegram profilni ulash uchun 1 daqiqalik kod
+- `GET /api/bot/access?telegram_id=...` — profil ulanganmi
 
 Barchasi `Authorization: Bearer BOT_API_SECRET` talab qiladi.
+
+Telegram botni saytga ulash: botda `/start` va `/kod`, kelgan kodni web dagi **Telegram bot** sahifasiga 1 daqiqa ichida kiriting. Ulanmagan profillar botdan foydalana olmaydi. Alohida `konstantalinebot` Python loyihasi shu API orqali ishlashi kerak.

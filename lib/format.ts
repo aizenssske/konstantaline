@@ -4,11 +4,20 @@ export function formatMoney(value: number, compact = false) {
   if (compact && Math.abs(value) >= 1_000_000) {
     return `${new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 1 }).format(value / 1_000_000)} mln`;
   }
-  return `${new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 0 }).format(value)} so‘m`;
+  return `${formatSomInput(value)} so‘m`;
 }
 
 export function formatNumber(value: number) {
   return new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 0 }).format(value);
+}
+
+export function formatSomInput(value: number) {
+  const safe = Number.isFinite(value) ? Math.round(Math.abs(value)) : 0;
+  return `${String(safe).replace(/\B(?=(\d{3})+(?!\d))/g, " ")}.0`;
+}
+
+export function digitsFromSomInput(value: string) {
+  return value.replace(/\.\d*$/, "").replace(/\D/g, "").replace(/^0+(?=\d)/, "");
 }
 
 export function todayTashkent() {

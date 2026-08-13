@@ -1,4 +1,4 @@
-import type { Employee, Expense, Sale, SalaryPayment, Shop } from "./types";
+import type { Employee, Expense, Sale, SalaryPayment, Shop, TelegramLink, TelegramLinkCode } from "./types";
 import { createId } from "./id";
 import { currentMonthTashkent, daysAgoDate, todayTashkent } from "./format";
 
@@ -8,6 +8,8 @@ type DemoStore = {
   expenses: Expense[];
   employees: Employee[];
   salaryPayments: SalaryPayment[];
+  telegramLinks: TelegramLink[];
+  telegramLinkCodes: TelegramLinkCode[];
 };
 
 declare global {
@@ -79,7 +81,7 @@ function seedStore(): DemoStore {
     { id: "demo-payment-2", employee_id: employees[1].id, shop_id: shops[0].id, payment_date: daysAgoDate(2), salary_month: currentMonthTashkent(), amount: 1_200_000, payment_type: "advance", description: "Oylik avans", created_at: now },
   ];
 
-  return { shops, sales, expenses, employees, salaryPayments };
+  return { shops, sales, expenses, employees, salaryPayments, telegramLinks: [], telegramLinkCodes: [] };
 }
 
 export function getDemoStore() {

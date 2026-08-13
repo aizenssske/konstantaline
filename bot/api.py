@@ -55,5 +55,16 @@ class WebBridge:
     async def add_salary_payment(self, data: dict[str, Any]) -> dict[str, Any]:
         return (await self.request("POST", "/salary-payments", json=data))["payment"]
 
+    async def is_linked(self, telegram_id: int) -> bool:
+        payload = await self.request("GET", "/access", params={"telegram_id": str(telegram_id)})
+        return bool(payload.get("linked") or payload.get("allowed"))
+
+    async def create_link_code(self, telegram_id: int, username: str = "", first_name: str = "") -> dict[str, Any]:
+        return await self.request(
+            "POST",
+            "/link-codes",
+            json={"telegram_id": telegram_id, "username": username, "first_name": first_name},
+        )
+
 
 bridge = WebBridge()
