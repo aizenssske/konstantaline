@@ -77,10 +77,48 @@ async def get_shops_or_error(message: Message) -> list[dict] | None:
 async def start(message: Message, state: FSMContext) -> None:
     await state.clear()
     name = escape(message.from_user.first_name if message.from_user else "")
+    telegram_id = message.from_user.id if message.from_user else 0
+    linked = telegram_id in config.allowed_telegram_ids
+    if not linked and telegram_id:
+        try:
+            linked = await bridge.is_linked(telegram_id)
+        except BridgeError:
+            linked = False
+    if linked:
+        await message.answer(
+            f"Assalomu alaykum, <b>{name}</b>! 👋\n\n"
+            "Men <b>Moliya</b> tizimining yordamchi botiman. Savdo va xarajat kiritish, avans berish hamda hisobotlarni ko‘rish mumkin.",
+            reply_markup=MAIN_MENU,
+        )
+        return
     await message.answer(
         f"Assalomu alaykum, <b>{name}</b>! 👋\n\n"
-        "Men <b>Moliya</b> tizimining yordamchi botiman. Savdo va xarajat kiritish, avans berish hamda hisobotlarni ko‘rish mumkin.",
-        reply_markup=MAIN_MENU,
+        "Bu bot faqat saytga ulangan Telegram profillar uchun ishlaydi.\n\n"
+        "1) <b>/kod</b> buyrug‘ini yuboring\n"
+        "2) Kelgan 6 xonali kodni 1 daqiqa ichida web saytdagi <b>Telegram bot</b> sahifasiga kiriting",
+    )
+
+
+@router.message(Command("kod"))
+async def link_code(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    user = message.from_user
+    if not user:
+        await message.answer("Telegram profil aniqlanmadi.")
+        return
+    try:
+        result = await bridge.create_link_code(user.id, user.username or "", user.first_name or "")
+    except BridgeError as exc:
+        await message.answer(f"⚠️ {escape(str(exc))}")
+        return
+    if result.get("already_linked"):
+        await message.answer("✅ Bu profil allaqachon saytga ulangan.", reply_markup=MAIN_MENU)
+        return
+    code = escape(str(result.get("code") or ""))
+    await message.answer(
+        f"🔑 Vaqtinchalik kod: <code>{code}</code>\n\n"
+        "Uni 1 daqiqa ichida web saytdagi <b>Telegram bot</b> sahifasiga kiriting.\n"
+        "Muddati o‘tsa, /kod ni qayta yuboring.",
     )
 
 

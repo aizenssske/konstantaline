@@ -97,6 +97,26 @@ export type DashboardData = {
   }>;
 };
 
+export type TelegramLink = {
+  id: string;
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  linked_at: string;
+  created_at: string;
+};
+
+export type TelegramLinkCode = {
+  id: string;
+  code: string;
+  telegram_id: number;
+  username: string;
+  first_name: string;
+  expires_at: string;
+  used_at: string | null;
+  created_at: string;
+};
+
 export type MonthlyReport = {
   month: string;
   summary: {

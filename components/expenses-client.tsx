@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "./page-header";
 import { useShop } from "./shop-context";
+import { MoneyInput } from "./money-input";
 import { Button, EmptyState, Field, LoadingBlock, Modal } from "./ui";
 import { currentMonthTashkent, formatMoney, monthRange, todayTashkent } from "@/lib/format";
 import { EXPENSE_CATEGORIES, type Expense } from "@/lib/types";
@@ -91,7 +92,7 @@ export function ExpensesClient() {
             <Field label="Do‘kon"><select name="shop_id" defaultValue={selectedShopId === "all" ? shops[0]?.id : selectedShopId} required>{shops.map((shop) => <option value={shop.id} key={shop.id}>{shop.name}</option>)}</select></Field>
             <Field label="Xarajat sanasi"><input name="expense_date" type="date" defaultValue={todayTashkent()} required /></Field>
             <Field label="Kategoriya"><select name="category" defaultValue="Mahsulot" required>{EXPENSE_CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></Field>
-            <Field label="Summa"><div className="currency-input"><input name="amount" type="number" min="1" step="1000" placeholder="0" inputMode="numeric" required /><span>so‘m</span></div></Field>
+            <Field label="Summa"><MoneyInput name="amount" required /></Field>
             <div className="full"><Field label="Xarajat izohi"><textarea name="description" placeholder="Nima uchun va kimga to‘landi?" required /></Field></div>
           </div>
           <div className="form-actions"><Button type="button" variant="secondary" onClick={() => setOpen(false)}>Bekor qilish</Button><Button type="submit" disabled={saving}><Wallet size={15} />{saving ? "Saqlanmoqda..." : "Xarajatni saqlash"}</Button></div>

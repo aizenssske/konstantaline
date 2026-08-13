@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   Bell,
+  Bot,
   Building2,
   ChevronDown,
   CircleDollarSign,
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/expenses", label: "Xarajatlar", icon: ReceiptText },
   { href: "/employees", label: "Ishchilar", icon: Users },
   { href: "/reports", label: "Hisobotlar", icon: BarChart3 },
+  { href: "/bot", label: "Telegram bot", icon: Bot },
   { href: "/settings", label: "Sozlamalar", icon: Settings },
 ];
 
@@ -101,7 +103,7 @@ function ShellContent({ children, username }: { children: React.ReactNode; usern
             <div className="user-chip"><span>{username.slice(0, 1).toUpperCase()}</span><div><strong>{username}</strong><small>Administrator</small></div></div>
           </div>
         </header>
-        {demoMode && <div className="demo-banner">Demo rejim: ma’lumotlar vaqtinchalik. Doimiy saqlash uchun Supabase’ni ulang.</div>}
+        {demoMode && <div className="demo-banner">Demo rejim: ma’lumotlar vaqtinchalik. Doimiy saqlash uchun Neon PostgreSQL’ni ulang.</div>}
         <main className="page-content">{children}</main>
       </div>
 

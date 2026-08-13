@@ -2,6 +2,8 @@
 
 Savdo, xarajat, ishchi oyligi, avans va filiallar hisobotini yurituvchi to‘liq tizim. Hozirgi 2 ta do‘kon bilan ishlaydi va yangi filiallar qo‘shishga tayyor.
 
+Valyuta — O‘zbekiston so‘mi. Til — o‘zbek tili. Asosiy vaqt zonasi — `Asia/Tashkent`.
+
 ## Imkoniyatlar
 
 - Bugungi jami, naqd va plastik savdo
@@ -21,11 +23,11 @@ Savdo, xarajat, ishchi oyligi, avans va filiallar hisobotini yurituvchi to‘liq
 | --- | --- | --- |
 | Web | Next.js 16.3, React 19, TypeScript, Turbopack | Vercel |
 | UI | Tailwind CSS 4, Recharts, Lucide | Vercel |
-| Baza | Supabase PostgreSQL | Supabase free |
+| Baza | Neon PostgreSQL + Drizzle ORM | Neon |
 | Bot | Python 3.13, aiogram 3, FastAPI webhook | Render free web service |
 | Ko‘prik | Himoyalangan Next.js REST API | Vercel |
 
-Brauzer va Telegram bot bazaga to‘g‘ridan-to‘g‘ri ulanmaydi. Bot `BOT_API_SECRET` bilan Vercel’dagi `/api/bot/*` ko‘prigiga murojaat qiladi, Next.js server esa Supabase’ga yozadi.
+Brauzer va Telegram bot bazaga to‘g‘ridan-to‘g‘ri ulanmaydi. Bot `BOT_API_SECRET` bilan Vercel’dagi `/api/bot/*` ko‘prigiga murojaat qiladi, Next.js server esa Neon’ga Drizzle orqali yozadi.
 
 ## Loyiha tuzilishi
 
@@ -33,7 +35,8 @@ Brauzer va Telegram bot bazaga to‘g‘ridan-to‘g‘ri ulanmaydi. Bot `BOT_AP
 app/                    Next.js sahifa va API route'lar
 components/             Dashboard interfeysi
 lib/                    Auth, validatsiya, repository va hisobotlar
-supabase/schema.sql     PostgreSQL sxemasi
+lib/db/                 Neon HTTP driver va Drizzle schema
+drizzle/                SQL migratsiyalar
 bot/                    Python Telegram bot
 render.yaml             Render Blueprint
 vercel.json             Vercel sozlamasi
@@ -44,20 +47,26 @@ vercel.json             Vercel sozlamasi
 Node.js 20.9+ kerak.
 
 ```bash
+cp .env.example .env.local
+```
+
+Lokal preview uchun `.env.local` da `DEMO_MODE=true` qiling. `DATABASE_URL` shart emas.
+
+```bash
 npm install
 npm run dev
 ```
 
 Sayt: [http://localhost:3000](http://localhost:3000)
 
-Lokal `.env.local` demo rejimga sozlangan. Kirish:
+Kirish (faqat development):
 
 ```text
 login: admin
 parol: admin12345
 ```
 
-Demo ma’lumotlar vaqtinchalik va server qayta ishga tushganda yo‘qolishi mumkin. Production’da bu login/parolni ishlatmang.
+Demo ma’lumotlar vaqtinchalik va server qayta ishga tushganda yo‘qoladi. Production’da bu login/parolni va `DEMO_MODE=true` ni ishlatmang.
 
 Tekshiruvlar:
 
@@ -67,26 +76,57 @@ npm run lint
 npm run build
 ```
 
-## 1. Supabase bazasini tayyorlash
+## 1. Neon bazasini tayyorlash
 
-1. [supabase.com](https://supabase.com) da bepul loyiha yarating.
-2. **SQL Editor** bo‘limiga kiring.
-3. [`supabase/schema.sql`](supabase/schema.sql) faylini to‘liq nusxalab, `Run` bosing.
-4. **Project Settings → API** dan quyidagilarni oling:
-   - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
-   - `service_role` secret key → `SUPABASE_SERVICE_ROLE_KEY`
+1. [neon.tech](https://neon.tech) da loyiha yarating.
+2. Regionni Vercel regioniga imkon qadar yaqin tanlang (quyida tavsiya).
+3. Dashboard’dan ikkita connection string oling:
+   - **Pooled connection** → `DATABASE_URL` (Next.js serverless runtime)
+   - **Direct connection** → `DATABASE_URL_UNPOOLED` (migratsiya va Drizzle Studio)
+4. Lokalda migratsiyani qo‘llang:
 
-`service_role` kalitini hech qachon brauzer kodi, Telegram yoki ommaviy joyga qo‘ymang. U faqat Vercel server environment’ida saqlanadi. Jadvallarda RLS yoqilgan, shuning uchun anonim brauzer ulanishi yopiq.
+```bash
+export DATABASE_URL_UNPOOLED="postgresql://..."
+npm run db:generate
+npm run db:migrate
+```
+
+`npm run db:studio` Drizzle Studio’ni ochadi.
+
+Migratsiya jadvallarni yaratadi va do‘konlar bo‘sh bo‘lsa `1-do‘kon` hamda `2-do‘kon` ni qo‘shadi. Mavjud qatorlar o‘chirilmaydi.
+
+Agar avvalgi PostgreSQL/Supabase’da real ma’lumot bo‘lsa, avval uni Neon’ga import qiling, keyin shu migratsiyani bo‘sh bazaga qayta ishlatmang:
+
+```bash
+pg_dump --no-owner --no-acl --data-only \
+  --table=shops --table=sales --table=expenses \
+  --table=employees --table=salary_payments \
+  "$OLD_DATABASE_URL" > moliya-data.sql
+```
+
+Import qilingandan so‘ng schema farqini `npm run db:generate` bilan tekshiring. Ma’lumotni o‘chiradigan `DROP` / `TRUNCATE` ishlatmang.
+
+### Vercel va Neon regionlari
+
+Kechtikishni kamaytirish uchun ilova va bazani bir xil mintaqaga qo‘ying. O‘zbekiston uchun tavsiya:
+
+| Vercel region | Neon region |
+| --- | --- |
+| Frankfurt (`fra1`) — afzal | AWS Frankfurt (`eu-central-1`) |
+| Washington, D.C. (`iad1`) | AWS US East 1 (`us-east-1`) |
+
+Frankfurt ilovasini AQSH bazasiga ulamang. Vercel Project Settings → Functions region va Neon project region bir-biriga mos bo‘lsin.
 
 ## 2. Vercel’ga web saytni joylash
 
 1. Vercel’da GitHub repository’ni import qiling.
 2. Framework sifatida **Next.js**, root directory sifatida repository ildizini qoldiring.
-3. Quyidagi Environment Variables’ni qo‘shing:
+3. Neon’ni Vercel Marketplace / Integration orqali ulang — u `DATABASE_URL` va `DATABASE_URL_UNPOOLED` ni o‘zi yozadi. Yoki qiymatlarni qo‘lda kiriting.
+4. Quyidagi Environment Variables’ni Production va Preview uchun qo‘shing:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://PROJECT.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=...
+DATABASE_URL=...
+DATABASE_URL_UNPOOLED=...
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=JUDA_KUCHLI_PAROL
 SESSION_SECRET=ALOHIDA_UZUN_RANDOM_SECRET
@@ -94,14 +134,18 @@ BOT_API_SECRET=BOT_UCHUN_BOSHQA_UZUN_RANDOM_SECRET
 DEMO_MODE=false
 ```
 
+`DATABASE_URL` ga `NEXT_PUBLIC_` prefiksini qo‘ymang. Eski `NEXT_PUBLIC_SUPABASE_URL` va `SUPABASE_SERVICE_ROLE_KEY` o‘zgaruvchilarini o‘chiring.
+
 Random secret yaratish:
 
 ```bash
 openssl rand -hex 32
 ```
 
-4. Deploy qiling. Masalan, web manzil `https://moliya.vercel.app` bo‘ladi.
-5. `/api/health` manzili `{"status":"ok","database":"supabase"}` qaytarishini tekshiring.
+5. Vercel deploy `npm run db:migrate` ni avtomatik ishga tushiradi va jadvallarni yaratadi. Lokalda ham xuddi shu buyruqni ishlatish mumkin.
+6. `/api/health` manzili `{"status":"ok","database":"neon","schema":"ready"}` qaytarishini tekshiring.
+
+Database sozlanmasa tizim demo rejimga o‘tmaydi — aniq konfiguratsiya xatosi qaytadi. Demo rejim faqat `DEMO_MODE=true` bo‘lganda yoqiladi.
 
 ## 3. Telegram bot yaratish
 
@@ -151,7 +195,8 @@ python polling.py
 - Bot API faqat Bearer `BOT_API_SECRET` bilan ishlaydi.
 - Telegram webhook `X-Telegram-Bot-Api-Secret-Token` orqali tekshiriladi.
 - Faqat `ALLOWED_TELEGRAM_IDS` ro‘yxatidagi Telegram hisoblari botdan foydalana oladi.
-- Barcha pul qiymatlari serverda Zod orqali tekshiriladi.
+- Barcha pul qiymatlari serverda Zod orqali tekshiriladi (100 milliard so‘mgacha) va bazada `numeric(16,2)` sifatida saqlanadi.
+- Database connection string faqat serverda o‘qiladi.
 - O‘chirilgan filial ma’lumotlari yo‘qolmaydi; filial faqat nofaol qilinadi.
 
 ## Muhit o‘zgaruvchilari
@@ -170,5 +215,9 @@ Bot uchun endpointlar:
 - `POST /api/bot/expenses`
 - `GET /api/bot/employees?shop_id=...`
 - `POST /api/bot/salary-payments`
+- `POST /api/bot/link-codes` — Telegram profilni ulash uchun 1 daqiqalik kod
+- `GET /api/bot/access?telegram_id=...` — profil ulanganmi
 
 Barchasi `Authorization: Bearer BOT_API_SECRET` talab qiladi.
+
+Telegram botni saytga ulash: botda `/start` va `/kod`, kelgan kodni web dagi **Telegram bot** sahifasiga 1 daqiqa ichida kiriting. Ulanmagan profillar botdan foydalana olmaydi. Alohida `konstantalinebot` Python loyihasi shu API orqali ishlashi kerak.

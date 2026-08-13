@@ -1,4 +1,7 @@
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { getDemoStore, withNewRecord } from "./demo-store";
+import { isDemoMode, readyDb } from "./db";
+import { employees, expenses, salaryPayments, sales, shops } from "./db/schema";
 import {
   currentMonthTashkent,
   daysAgoDate,
@@ -7,12 +10,12 @@ import {
   shortDate,
   todayTashkent,
 } from "./format";
-import { getSupabaseAdmin, isDemoMode } from "./supabase";
 import type {
   DashboardData,
   Employee,
   Expense,
   MonthlyReport,
+  PaymentType,
   Sale,
   SalaryPayment,
   Shop,
@@ -20,36 +23,109 @@ import type {
 
 type DateFilter = { shopId?: string; from?: string; to?: string };
 
-const asNumber = (value: unknown) => Number(value ?? 0);
+const asNumber = (value: unknown) => {
+  const amount = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+};
 
-function normalizeSale(row: Record<string, unknown>): Sale {
-  return { ...(row as unknown as Sale), cash_amount: asNumber(row.cash_amount), card_amount: asNumber(row.card_amount) };
-}
-function normalizeExpense(row: Record<string, unknown>): Expense {
-  return { ...(row as unknown as Expense), amount: asNumber(row.amount) };
-}
-function normalizeEmployee(row: Record<string, unknown>): Employee {
-  return { ...(row as unknown as Employee), monthly_salary: asNumber(row.monthly_salary) };
-}
-function normalizePayment(row: Record<string, unknown>): SalaryPayment {
-  return { ...(row as unknown as SalaryPayment), amount: asNumber(row.amount) };
+const moneyValue = (value: number) => {
+  if (!Number.isFinite(value)) throw new Error("Noto‘g‘ri summa");
+  return Math.round(value * 100) / 100;
+};
+
+function asIso(value: unknown) {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+  }
+  return new Date().toISOString();
 }
 
-function assertData<T>(data: T | null, error: { message: string } | null) {
-  if (error) throw new Error(error.message);
-  return data as T;
+function asDateOnly(value: unknown) {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "string") return value.slice(0, 10);
+  return String(value);
+}
+
+function requireRow<T>(row: T | undefined, message: string): T {
+  if (!row) throw new Error(message);
+  return row;
+}
+
+function normalizeShop(row: typeof shops.$inferSelect): Shop {
+  return {
+    id: row.id,
+    name: row.name,
+    address: row.address,
+    is_active: row.is_active,
+    created_at: asIso(row.created_at),
+  };
+}
+
+function normalizeSale(row: typeof sales.$inferSelect): Sale {
+  return {
+    id: row.id,
+    shop_id: row.shop_id,
+    sale_date: asDateOnly(row.sale_date),
+    cash_amount: asNumber(row.cash_amount),
+    card_amount: asNumber(row.card_amount),
+    description: row.description,
+    created_at: asIso(row.created_at),
+  };
+}
+
+function normalizeExpense(row: typeof expenses.$inferSelect): Expense {
+  return {
+    id: row.id,
+    shop_id: row.shop_id,
+    expense_date: asDateOnly(row.expense_date),
+    amount: asNumber(row.amount),
+    category: row.category,
+    description: row.description,
+    created_at: asIso(row.created_at),
+  };
+}
+
+function normalizeEmployee(row: typeof employees.$inferSelect): Employee {
+  return {
+    id: row.id,
+    shop_id: row.shop_id,
+    full_name: row.full_name,
+    role: row.role,
+    phone: row.phone,
+    monthly_salary: asNumber(row.monthly_salary),
+    hired_at: asDateOnly(row.hired_at),
+    is_active: row.is_active,
+    created_at: asIso(row.created_at),
+  };
+}
+
+function normalizePayment(row: typeof salaryPayments.$inferSelect): SalaryPayment {
+  return {
+    id: row.id,
+    employee_id: row.employee_id,
+    shop_id: row.shop_id,
+    payment_date: asDateOnly(row.payment_date),
+    salary_month: row.salary_month,
+    amount: asNumber(row.amount),
+    payment_type: row.payment_type,
+    description: row.description,
+    created_at: asIso(row.created_at),
+  };
 }
 
 export async function listShops(includeInactive = false): Promise<Shop[]> {
   if (isDemoMode()) {
-    return getDemoStore().shops
-      .filter((shop) => includeInactive || shop.is_active)
+    return getDemoStore()
+      .shops.filter((shop) => includeInactive || shop.is_active)
       .sort((a, b) => a.name.localeCompare(b.name));
   }
-  let query = getSupabaseAdmin()!.from("shops").select("*").order("name");
-  if (!includeInactive) query = query.eq("is_active", true);
-  const { data, error } = await query;
-  return assertData<Shop[]>(data as Shop[] | null, error);
+  const db = await readyDb();
+  const rows = includeInactive
+    ? await db.select().from(shops).orderBy(shops.name)
+    : await db.select().from(shops).where(eq(shops.is_active, true)).orderBy(shops.name);
+  return rows.map(normalizeShop);
 }
 
 export async function createShop(input: Pick<Shop, "name" | "address">): Promise<Shop> {
@@ -58,54 +134,62 @@ export async function createShop(input: Pick<Shop, "name" | "address">): Promise
     getDemoStore().shops.push(record);
     return record;
   }
-  const { data, error } = await getSupabaseAdmin()!
-    .from("shops")
-    .insert({ ...input, is_active: true })
-    .select("*")
-    .single();
-  return assertData<Shop>(data as Shop | null, error);
+  const [row] = await (await readyDb())
+    .insert(shops)
+    .values({ ...input, is_active: true })
+    .returning();
+  return normalizeShop(requireRow(row, "Filialni saqlab bo‘lmadi"));
 }
 
-export async function updateShop(id: string, input: Partial<Pick<Shop, "name" | "address" | "is_active">>): Promise<Shop> {
+export async function updateShop(
+  id: string,
+  input: Partial<Pick<Shop, "name" | "address" | "is_active">>,
+): Promise<Shop> {
   if (isDemoMode()) {
     const shop = getDemoStore().shops.find((item) => item.id === id);
     if (!shop) throw new Error("Do‘kon topilmadi");
     Object.assign(shop, input);
     return shop;
   }
-  const { data, error } = await getSupabaseAdmin()!
-    .from("shops")
-    .update(input)
-    .eq("id", id)
-    .select("*")
-    .single();
-  return assertData<Shop>(data as Shop | null, error);
+  const [row] = await (await readyDb()).update(shops).set(input).where(eq(shops.id, id)).returning();
+  return normalizeShop(requireRow(row, "Do‘kon topilmadi"));
 }
 
 export async function listSales(filter: DateFilter = {}): Promise<Sale[]> {
   if (isDemoMode()) {
-    return getDemoStore().sales
-      .filter((item) => !filter.shopId || item.shop_id === filter.shopId)
+    return getDemoStore()
+      .sales.filter((item) => !filter.shopId || item.shop_id === filter.shopId)
       .filter((item) => !filter.from || item.sale_date >= filter.from)
       .filter((item) => !filter.to || item.sale_date <= filter.to)
       .sort((a, b) => b.sale_date.localeCompare(a.sale_date) || b.created_at.localeCompare(a.created_at));
   }
-  let query = getSupabaseAdmin()!.from("sales").select("*").order("sale_date", { ascending: false }).order("created_at", { ascending: false });
-  if (filter.shopId) query = query.eq("shop_id", filter.shopId);
-  if (filter.from) query = query.gte("sale_date", filter.from);
-  if (filter.to) query = query.lte("sale_date", filter.to);
-  const { data, error } = await query;
-  return assertData<Record<string, unknown>[]>(data, error).map(normalizeSale);
+  const conditions = [
+    filter.shopId ? eq(sales.shop_id, filter.shopId) : undefined,
+    filter.from ? gte(sales.sale_date, filter.from) : undefined,
+    filter.to ? lte(sales.sale_date, filter.to) : undefined,
+  ].filter(Boolean);
+
+  const rows = await (await readyDb())
+    .select()
+    .from(sales)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(sales.sale_date), desc(sales.created_at));
+  return rows.map(normalizeSale);
 }
 
 export async function createSale(input: Omit<Sale, "id" | "created_at">): Promise<Sale> {
+  const payload = {
+    ...input,
+    cash_amount: moneyValue(input.cash_amount),
+    card_amount: moneyValue(input.card_amount),
+  };
   if (isDemoMode()) {
-    const record = withNewRecord(input) as Sale;
+    const record = withNewRecord(payload) as Sale;
     getDemoStore().sales.unshift(record);
     return record;
   }
-  const { data, error } = await getSupabaseAdmin()!.from("sales").insert(input).select("*").single();
-  return normalizeSale(assertData<Record<string, unknown>>(data, error));
+  const [row] = await (await readyDb()).insert(sales).values(payload).returning();
+  return normalizeSale(requireRow(row, "Savdoni saqlab bo‘lmadi"));
 }
 
 export async function deleteSale(id: string) {
@@ -114,34 +198,43 @@ export async function deleteSale(id: string) {
     store.sales = store.sales.filter((item) => item.id !== id);
     return;
   }
-  const { error } = await getSupabaseAdmin()!.from("sales").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  await (await readyDb()).delete(sales).where(eq(sales.id, id));
 }
 
 export async function listExpenses(filter: DateFilter = {}): Promise<Expense[]> {
   if (isDemoMode()) {
-    return getDemoStore().expenses
-      .filter((item) => !filter.shopId || item.shop_id === filter.shopId)
+    return getDemoStore()
+      .expenses.filter((item) => !filter.shopId || item.shop_id === filter.shopId)
       .filter((item) => !filter.from || item.expense_date >= filter.from)
       .filter((item) => !filter.to || item.expense_date <= filter.to)
-      .sort((a, b) => b.expense_date.localeCompare(a.expense_date) || b.created_at.localeCompare(a.created_at));
+      .sort(
+        (a, b) =>
+          b.expense_date.localeCompare(a.expense_date) || b.created_at.localeCompare(a.created_at),
+      );
   }
-  let query = getSupabaseAdmin()!.from("expenses").select("*").order("expense_date", { ascending: false }).order("created_at", { ascending: false });
-  if (filter.shopId) query = query.eq("shop_id", filter.shopId);
-  if (filter.from) query = query.gte("expense_date", filter.from);
-  if (filter.to) query = query.lte("expense_date", filter.to);
-  const { data, error } = await query;
-  return assertData<Record<string, unknown>[]>(data, error).map(normalizeExpense);
+  const conditions = [
+    filter.shopId ? eq(expenses.shop_id, filter.shopId) : undefined,
+    filter.from ? gte(expenses.expense_date, filter.from) : undefined,
+    filter.to ? lte(expenses.expense_date, filter.to) : undefined,
+  ].filter(Boolean);
+
+  const rows = await (await readyDb())
+    .select()
+    .from(expenses)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(expenses.expense_date), desc(expenses.created_at));
+  return rows.map(normalizeExpense);
 }
 
 export async function createExpense(input: Omit<Expense, "id" | "created_at">): Promise<Expense> {
+  const payload = { ...input, amount: moneyValue(input.amount) };
   if (isDemoMode()) {
-    const record = withNewRecord(input) as Expense;
+    const record = withNewRecord(payload) as Expense;
     getDemoStore().expenses.unshift(record);
     return record;
   }
-  const { data, error } = await getSupabaseAdmin()!.from("expenses").insert(input).select("*").single();
-  return normalizeExpense(assertData<Record<string, unknown>>(data, error));
+  const [row] = await (await readyDb()).insert(expenses).values(payload).returning();
+  return normalizeExpense(requireRow(row, "Xarajatni saqlab bo‘lmadi"));
 }
 
 export async function deleteExpense(id: string) {
@@ -150,73 +243,107 @@ export async function deleteExpense(id: string) {
     store.expenses = store.expenses.filter((item) => item.id !== id);
     return;
   }
-  const { error } = await getSupabaseAdmin()!.from("expenses").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  await (await readyDb()).delete(expenses).where(eq(expenses.id, id));
 }
 
 export async function listEmployees(shopId?: string, includeInactive = false): Promise<Employee[]> {
   if (isDemoMode()) {
-    return getDemoStore().employees
-      .filter((item) => !shopId || item.shop_id === shopId)
+    return getDemoStore()
+      .employees.filter((item) => !shopId || item.shop_id === shopId)
       .filter((item) => includeInactive || item.is_active)
       .sort((a, b) => a.full_name.localeCompare(b.full_name));
   }
-  let query = getSupabaseAdmin()!.from("employees").select("*").order("full_name");
-  if (shopId) query = query.eq("shop_id", shopId);
-  if (!includeInactive) query = query.eq("is_active", true);
-  const { data, error } = await query;
-  return assertData<Record<string, unknown>[]>(data, error).map(normalizeEmployee);
+  const conditions = [
+    shopId ? eq(employees.shop_id, shopId) : undefined,
+    includeInactive ? undefined : eq(employees.is_active, true),
+  ].filter(Boolean);
+
+  const rows = await (await readyDb())
+    .select()
+    .from(employees)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(employees.full_name);
+  return rows.map(normalizeEmployee);
 }
 
-export async function createEmployee(input: Omit<Employee, "id" | "created_at" | "is_active">): Promise<Employee> {
-  const payload = { ...input, is_active: true };
+export async function createEmployee(
+  input: Omit<Employee, "id" | "created_at" | "is_active">,
+): Promise<Employee> {
+  const payload = { ...input, monthly_salary: moneyValue(input.monthly_salary), is_active: true };
   if (isDemoMode()) {
     const record = withNewRecord(payload) as Employee;
     getDemoStore().employees.push(record);
     return record;
   }
-  const { data, error } = await getSupabaseAdmin()!.from("employees").insert(payload).select("*").single();
-  return normalizeEmployee(assertData<Record<string, unknown>>(data, error));
+  const [row] = await (await readyDb()).insert(employees).values(payload).returning();
+  return normalizeEmployee(requireRow(row, "Ishchini saqlab bo‘lmadi"));
 }
 
-export async function updateEmployee(id: string, input: Partial<Pick<Employee, "full_name" | "role" | "phone" | "monthly_salary" | "is_active">>): Promise<Employee> {
+export async function updateEmployee(
+  id: string,
+  input: Partial<Pick<Employee, "full_name" | "role" | "phone" | "monthly_salary" | "is_active">>,
+): Promise<Employee> {
+  const payload = {
+    ...input,
+    monthly_salary:
+      input.monthly_salary === undefined ? undefined : moneyValue(input.monthly_salary),
+  };
   if (isDemoMode()) {
     const employee = getDemoStore().employees.find((item) => item.id === id);
     if (!employee) throw new Error("Ishchi topilmadi");
-    Object.assign(employee, input);
+    Object.assign(employee, payload);
     return employee;
   }
-  const { data, error } = await getSupabaseAdmin()!.from("employees").update(input).eq("id", id).select("*").single();
-  return normalizeEmployee(assertData<Record<string, unknown>>(data, error));
+  const [row] = await (await readyDb()).update(employees).set(payload).where(eq(employees.id, id)).returning();
+  return normalizeEmployee(requireRow(row, "Ishchi topilmadi"));
 }
 
-export async function listSalaryPayments(filter: { shopId?: string; employeeId?: string; month?: string } = {}): Promise<SalaryPayment[]> {
+export async function listSalaryPayments(
+  filter: { shopId?: string; employeeId?: string; month?: string } = {},
+): Promise<SalaryPayment[]> {
   if (isDemoMode()) {
-    return getDemoStore().salaryPayments
-      .filter((item) => !filter.shopId || item.shop_id === filter.shopId)
+    return getDemoStore()
+      .salaryPayments.filter((item) => !filter.shopId || item.shop_id === filter.shopId)
       .filter((item) => !filter.employeeId || item.employee_id === filter.employeeId)
       .filter((item) => !filter.month || item.salary_month === filter.month)
-      .sort((a, b) => b.payment_date.localeCompare(a.payment_date) || b.created_at.localeCompare(a.created_at));
+      .sort(
+        (a, b) =>
+          b.payment_date.localeCompare(a.payment_date) || b.created_at.localeCompare(a.created_at),
+      );
   }
-  let query = getSupabaseAdmin()!.from("salary_payments").select("*").order("payment_date", { ascending: false }).order("created_at", { ascending: false });
-  if (filter.shopId) query = query.eq("shop_id", filter.shopId);
-  if (filter.employeeId) query = query.eq("employee_id", filter.employeeId);
-  if (filter.month) query = query.eq("salary_month", filter.month);
-  const { data, error } = await query;
-  return assertData<Record<string, unknown>[]>(data, error).map(normalizePayment);
+  const conditions = [
+    filter.shopId ? eq(salaryPayments.shop_id, filter.shopId) : undefined,
+    filter.employeeId ? eq(salaryPayments.employee_id, filter.employeeId) : undefined,
+    filter.month ? eq(salaryPayments.salary_month, filter.month) : undefined,
+  ].filter(Boolean);
+
+  const rows = await (await readyDb())
+    .select()
+    .from(salaryPayments)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(salaryPayments.payment_date), desc(salaryPayments.created_at));
+  return rows.map(normalizePayment);
 }
 
-export async function createSalaryPayment(input: Omit<SalaryPayment, "id" | "created_at">): Promise<SalaryPayment> {
+export async function createSalaryPayment(
+  input: Omit<SalaryPayment, "id" | "created_at">,
+): Promise<SalaryPayment> {
+  const payload = {
+    ...input,
+    amount: moneyValue(input.amount),
+    payment_type: input.payment_type as PaymentType,
+  };
   if (isDemoMode()) {
-    const record = withNewRecord(input) as SalaryPayment;
+    const record = withNewRecord(payload) as SalaryPayment;
     getDemoStore().salaryPayments.unshift(record);
     return record;
   }
-  const { data, error } = await getSupabaseAdmin()!.from("salary_payments").insert(input).select("*").single();
-  return normalizePayment(assertData<Record<string, unknown>>(data, error));
+  const [row] = await (await readyDb()).insert(salaryPayments).values(payload).returning();
+  return normalizePayment(requireRow(row, "To‘lovni saqlab bo‘lmadi"));
 }
 
-const sum = <T>(items: T[], picker: (item: T) => number) => items.reduce((total, item) => total + picker(item), 0);
+const sum = <T>(items: T[], picker: (item: T) => number) =>
+  items.reduce((total, item) => total + picker(item), 0);
 const saleTotal = (sale: Sale) => sale.cash_amount + sale.card_amount;
 
 export async function getDashboard(shopId?: string): Promise<DashboardData> {
@@ -226,44 +353,60 @@ export async function getDashboard(shopId?: string): Promise<DashboardData> {
   const weekStart = daysAgoDate(6);
   const yesterday = daysAgoDate(1);
 
-  const [shops, monthSales, monthExpenses, payments, weekSales, weekExpenses, yesterdaySales, employees] = await Promise.all([
-    listShops(),
-    listSales({ shopId, from: monthStart, to: monthEnd }),
-    listExpenses({ shopId, from: monthStart, to: monthEnd }),
-    listSalaryPayments({ shopId, month }),
-    listSales({ shopId, from: weekStart, to: today }),
-    listExpenses({ shopId, from: weekStart, to: today }),
-    listSales({ shopId, from: yesterday, to: yesterday }),
-    listEmployees(shopId),
-  ]);
+  const [shopList, monthSales, monthExpenses, payments, weekSales, weekExpenses, yesterdaySales, employeeList] =
+    await Promise.all([
+      listShops(),
+      listSales({ shopId, from: monthStart, to: monthEnd }),
+      listExpenses({ shopId, from: monthStart, to: monthEnd }),
+      listSalaryPayments({ shopId, month }),
+      listSales({ shopId, from: weekStart, to: today }),
+      listExpenses({ shopId, from: weekStart, to: today }),
+      listSales({ shopId, from: yesterday, to: yesterday }),
+      listEmployees(shopId),
+    ]);
 
   const todaySales = monthSales.filter((item) => item.sale_date === today);
   const todayTotal = sum(todaySales, saleTotal);
   const yesterdayTotal = sum(yesterdaySales, saleTotal);
   const monthTotal = sum(monthSales, saleTotal);
   const monthExpenseTotal = sum(monthExpenses, (item) => item.amount);
-  const salaryTotal = sum(payments.filter((item) => item.payment_type !== "deduction"), (item) => item.amount);
+  const salaryTotal = sum(
+    payments.filter((item) => item.payment_type !== "deduction"),
+    (item) => item.amount,
+  );
 
   const chart = Array.from({ length: 7 }, (_, index) => {
     const date = daysAgoDate(6 - index);
     return {
       date,
       label: shortDate(date),
-      sales: sum(weekSales.filter((item) => item.sale_date === date), saleTotal),
-      expenses: sum(weekExpenses.filter((item) => item.expense_date === date), (item) => item.amount),
+      sales: sum(
+        weekSales.filter((item) => item.sale_date === date),
+        saleTotal,
+      ),
+      expenses: sum(
+        weekExpenses.filter((item) => item.expense_date === date),
+        (item) => item.amount,
+      ),
     };
   });
 
-  const relevantShops = shopId ? shops.filter((shop) => shop.id === shopId) : shops;
+  const relevantShops = shopId ? shopList.filter((shop) => shop.id === shopId) : shopList;
   const shopPerformance = relevantShops.map((shop) => ({
     shopId: shop.id,
     shopName: shop.name,
-    sales: sum(monthSales.filter((item) => item.shop_id === shop.id), saleTotal),
-    expenses: sum(monthExpenses.filter((item) => item.shop_id === shop.id), (item) => item.amount),
+    sales: sum(
+      monthSales.filter((item) => item.shop_id === shop.id),
+      saleTotal,
+    ),
+    expenses: sum(
+      monthExpenses.filter((item) => item.shop_id === shop.id),
+      (item) => item.amount,
+    ),
   }));
 
-  const shopMap = new Map(shops.map((shop) => [shop.id, shop.name]));
-  const employeeMap = new Map(employees.map((employee) => [employee.id, employee.full_name]));
+  const shopMap = new Map(shopList.map((shop) => [shop.id, shop.name]));
+  const employeeMap = new Map(employeeList.map((employee) => [employee.id, employee.full_name]));
   const recent: DashboardData["recent"] = [
     ...monthSales.slice(0, 8).map((item) => ({
       id: item.id,
@@ -314,7 +457,7 @@ export async function getMonthlyReport(month: string, shopId?: string): Promise<
   const range = monthRange(month);
   const previous = previousMonth(month);
   const previousRange = monthRange(previous);
-  const [sales, expenses, payments, shops, previousSales] = await Promise.all([
+  const [monthSales, monthExpenses, payments, shopList, previousSales] = await Promise.all([
     listSales({ shopId, ...range }),
     listExpenses({ shopId, ...range }),
     listSalaryPayments({ shopId, month }),
@@ -322,9 +465,12 @@ export async function getMonthlyReport(month: string, shopId?: string): Promise<
     listSales({ shopId, ...previousRange }),
   ]);
 
-  const totalSales = sum(sales, saleTotal);
-  const expenseTotal = sum(expenses, (item) => item.amount);
-  const salaryTotal = sum(payments.filter((item) => item.payment_type !== "deduction"), (item) => item.amount);
+  const totalSales = sum(monthSales, saleTotal);
+  const expenseTotal = sum(monthExpenses, (item) => item.amount);
+  const salaryTotal = sum(
+    payments.filter((item) => item.payment_type !== "deduction"),
+    (item) => item.amount,
+  );
   const previousTotal = sum(previousSales, saleTotal);
   const lastDay = Number(range.to.slice(-2));
   const daily = Array.from({ length: lastDay }, (_, index) => {
@@ -332,37 +478,59 @@ export async function getMonthlyReport(month: string, shopId?: string): Promise<
     return {
       date,
       label: String(index + 1),
-      sales: sum(sales.filter((item) => item.sale_date === date), saleTotal),
-      expenses: sum(expenses.filter((item) => item.expense_date === date), (item) => item.amount),
+      sales: sum(
+        monthSales.filter((item) => item.sale_date === date),
+        saleTotal,
+      ),
+      expenses: sum(
+        monthExpenses.filter((item) => item.expense_date === date),
+        (item) => item.amount,
+      ),
     };
   });
 
   const categoryMap = new Map<string, number>();
-  for (const item of expenses) categoryMap.set(item.category, (categoryMap.get(item.category) ?? 0) + item.amount);
+  for (const item of monthExpenses) {
+    categoryMap.set(item.category, (categoryMap.get(item.category) ?? 0) + item.amount);
+  }
   const categories = [...categoryMap.entries()]
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
 
-  const relevantShops = shopId ? shops.filter((item) => item.id === shopId) : shops;
+  const relevantShops = shopId ? shopList.filter((item) => item.id === shopId) : shopList;
   const shopResults = relevantShops.map((shop) => {
-    const shopSales = sum(sales.filter((item) => item.shop_id === shop.id), saleTotal);
-    const shopExpenses = sum(expenses.filter((item) => item.shop_id === shop.id), (item) => item.amount);
-    const shopSalaries = sum(payments.filter((item) => item.shop_id === shop.id && item.payment_type !== "deduction"), (item) => item.amount);
-    return { name: shop.name, sales: shopSales, expenses: shopExpenses + shopSalaries, net: shopSales - shopExpenses - shopSalaries };
+    const shopSales = sum(
+      monthSales.filter((item) => item.shop_id === shop.id),
+      saleTotal,
+    );
+    const shopExpenses = sum(
+      monthExpenses.filter((item) => item.shop_id === shop.id),
+      (item) => item.amount,
+    );
+    const shopSalaries = sum(
+      payments.filter((item) => item.shop_id === shop.id && item.payment_type !== "deduction"),
+      (item) => item.amount,
+    );
+    return {
+      name: shop.name,
+      sales: shopSales,
+      expenses: shopExpenses + shopSalaries,
+      net: shopSales - shopExpenses - shopSalaries,
+    };
   });
 
   return {
     month,
     summary: {
       totalSales,
-      cash: sum(sales, (item) => item.cash_amount),
-      card: sum(sales, (item) => item.card_amount),
+      cash: sum(monthSales, (item) => item.cash_amount),
+      card: sum(monthSales, (item) => item.card_amount),
       expenses: expenseTotal,
       salaries: salaryTotal,
       net: totalSales - expenseTotal - salaryTotal,
       previousSales: previousTotal,
       growth: previousTotal ? ((totalSales - previousTotal) / previousTotal) * 100 : null,
-      saleDays: new Set(sales.map((item) => item.sale_date)).size,
+      saleDays: new Set(monthSales.map((item) => item.sale_date)).size,
     },
     daily,
     categories,

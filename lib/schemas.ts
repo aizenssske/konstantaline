@@ -37,6 +37,16 @@ export const employeeSchema = z.object({
   hired_at: z.string().date(),
 });
 
+export const telegramLinkCodeRequestSchema = z.object({
+  telegram_id: z.coerce.number().int().positive(),
+  username: z.string().trim().max(64).default(""),
+  first_name: z.string().trim().max(100).default(""),
+});
+
+export const telegramLinkRedeemSchema = z.object({
+  code: z.string().trim().regex(/^\d{6}$/, "Kod 6 xonali bo‘lishi kerak"),
+});
+
 export const salaryPaymentSchema = z.object({
   employee_id: z.string().min(1),
   shop_id: z.string().min(1),

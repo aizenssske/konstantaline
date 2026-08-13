@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "./page-header";
 import { useShop } from "./shop-context";
+import { MoneyInput } from "./money-input";
 import { Button, EmptyState, Field, LoadingBlock, Modal } from "./ui";
 import { currentMonthTashkent, formatMoney, monthRange, todayTashkent } from "@/lib/format";
 import type { Sale } from "@/lib/types";
@@ -115,8 +116,8 @@ export function SalesClient() {
           <div className="form-grid">
             <Field label="Do‘kon"><select name="shop_id" defaultValue={selectedShopId === "all" ? shops[0]?.id : selectedShopId} required>{shops.map((shop) => <option value={shop.id} key={shop.id}>{shop.name}</option>)}</select></Field>
             <Field label="Savdo sanasi"><input name="sale_date" type="date" defaultValue={todayTashkent()} required /></Field>
-            <Field label="Naqd savdo"><div className="currency-input"><input name="cash_amount" type="number" min="0" step="1000" defaultValue="0" inputMode="numeric" /><span>so‘m</span></div></Field>
-            <Field label="Plastik orqali"><div className="currency-input"><input name="card_amount" type="number" min="0" step="1000" defaultValue="0" inputMode="numeric" /><span>so‘m</span></div></Field>
+            <Field label="Naqd savdo"><MoneyInput name="cash_amount" defaultValue={0} allowZero /></Field>
+            <Field label="Plastik orqali"><MoneyInput name="card_amount" defaultValue={0} allowZero /></Field>
             <div className="full"><Field label="Izoh" hint="Ixtiyoriy"><textarea name="description" placeholder="Masalan: kunlik savdo, aksiya kuni..." /></Field></div>
           </div>
           <div className="form-actions"><Button type="button" variant="secondary" onClick={() => setOpen(false)}>Bekor qilish</Button><Button type="submit" disabled={saving}><WalletCards size={15} />{saving ? "Saqlanmoqda..." : "Savdoni saqlash"}</Button></div>
