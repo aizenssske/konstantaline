@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { getDemoStore, withNewRecord } from "./demo-store";
-import { getDb, isDemoMode } from "./db";
+import { isDemoMode, readyDb } from "./db";
 import { employees, expenses, salaryPayments, sales, shops } from "./db/schema";
 import {
   currentMonthTashkent,
@@ -121,7 +121,7 @@ export async function listShops(includeInactive = false): Promise<Shop[]> {
       .shops.filter((shop) => includeInactive || shop.is_active)
       .sort((a, b) => a.name.localeCompare(b.name));
   }
-  const db = getDb();
+  const db = await readyDb();
   const rows = includeInactive
     ? await db.select().from(shops).orderBy(shops.name)
     : await db.select().from(shops).where(eq(shops.is_active, true)).orderBy(shops.name);
@@ -134,7 +134,7 @@ export async function createShop(input: Pick<Shop, "name" | "address">): Promise
     getDemoStore().shops.push(record);
     return record;
   }
-  const [row] = await getDb()
+  const [row] = await (await readyDb())
     .insert(shops)
     .values({ ...input, is_active: true })
     .returning();
@@ -151,7 +151,7 @@ export async function updateShop(
     Object.assign(shop, input);
     return shop;
   }
-  const [row] = await getDb().update(shops).set(input).where(eq(shops.id, id)).returning();
+  const [row] = await (await readyDb()).update(shops).set(input).where(eq(shops.id, id)).returning();
   return normalizeShop(requireRow(row, "Do‘kon topilmadi"));
 }
 
@@ -169,7 +169,7 @@ export async function listSales(filter: DateFilter = {}): Promise<Sale[]> {
     filter.to ? lte(sales.sale_date, filter.to) : undefined,
   ].filter(Boolean);
 
-  const rows = await getDb()
+  const rows = await (await readyDb())
     .select()
     .from(sales)
     .where(conditions.length ? and(...conditions) : undefined)
@@ -188,7 +188,7 @@ export async function createSale(input: Omit<Sale, "id" | "created_at">): Promis
     getDemoStore().sales.unshift(record);
     return record;
   }
-  const [row] = await getDb().insert(sales).values(payload).returning();
+  const [row] = await (await readyDb()).insert(sales).values(payload).returning();
   return normalizeSale(requireRow(row, "Savdoni saqlab bo‘lmadi"));
 }
 
@@ -198,7 +198,7 @@ export async function deleteSale(id: string) {
     store.sales = store.sales.filter((item) => item.id !== id);
     return;
   }
-  await getDb().delete(sales).where(eq(sales.id, id));
+  await (await readyDb()).delete(sales).where(eq(sales.id, id));
 }
 
 export async function listExpenses(filter: DateFilter = {}): Promise<Expense[]> {
@@ -218,7 +218,7 @@ export async function listExpenses(filter: DateFilter = {}): Promise<Expense[]> 
     filter.to ? lte(expenses.expense_date, filter.to) : undefined,
   ].filter(Boolean);
 
-  const rows = await getDb()
+  const rows = await (await readyDb())
     .select()
     .from(expenses)
     .where(conditions.length ? and(...conditions) : undefined)
@@ -233,7 +233,7 @@ export async function createExpense(input: Omit<Expense, "id" | "created_at">): 
     getDemoStore().expenses.unshift(record);
     return record;
   }
-  const [row] = await getDb().insert(expenses).values(payload).returning();
+  const [row] = await (await readyDb()).insert(expenses).values(payload).returning();
   return normalizeExpense(requireRow(row, "Xarajatni saqlab bo‘lmadi"));
 }
 
@@ -243,7 +243,7 @@ export async function deleteExpense(id: string) {
     store.expenses = store.expenses.filter((item) => item.id !== id);
     return;
   }
-  await getDb().delete(expenses).where(eq(expenses.id, id));
+  await (await readyDb()).delete(expenses).where(eq(expenses.id, id));
 }
 
 export async function listEmployees(shopId?: string, includeInactive = false): Promise<Employee[]> {
@@ -258,7 +258,7 @@ export async function listEmployees(shopId?: string, includeInactive = false): P
     includeInactive ? undefined : eq(employees.is_active, true),
   ].filter(Boolean);
 
-  const rows = await getDb()
+  const rows = await (await readyDb())
     .select()
     .from(employees)
     .where(conditions.length ? and(...conditions) : undefined)
@@ -275,7 +275,7 @@ export async function createEmployee(
     getDemoStore().employees.push(record);
     return record;
   }
-  const [row] = await getDb().insert(employees).values(payload).returning();
+  const [row] = await (await readyDb()).insert(employees).values(payload).returning();
   return normalizeEmployee(requireRow(row, "Ishchini saqlab bo‘lmadi"));
 }
 
@@ -294,7 +294,7 @@ export async function updateEmployee(
     Object.assign(employee, payload);
     return employee;
   }
-  const [row] = await getDb().update(employees).set(payload).where(eq(employees.id, id)).returning();
+  const [row] = await (await readyDb()).update(employees).set(payload).where(eq(employees.id, id)).returning();
   return normalizeEmployee(requireRow(row, "Ishchi topilmadi"));
 }
 
@@ -317,7 +317,7 @@ export async function listSalaryPayments(
     filter.month ? eq(salaryPayments.salary_month, filter.month) : undefined,
   ].filter(Boolean);
 
-  const rows = await getDb()
+  const rows = await (await readyDb())
     .select()
     .from(salaryPayments)
     .where(conditions.length ? and(...conditions) : undefined)
@@ -338,7 +338,7 @@ export async function createSalaryPayment(
     getDemoStore().salaryPayments.unshift(record);
     return record;
   }
-  const [row] = await getDb().insert(salaryPayments).values(payload).returning();
+  const [row] = await (await readyDb()).insert(salaryPayments).values(payload).returning();
   return normalizePayment(requireRow(row, "To‘lovni saqlab bo‘lmadi"));
 }
 

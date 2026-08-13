@@ -3,10 +3,17 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { DatabaseConfigError } from "./errors";
 import { isDemoMode } from "./mode";
 import { schema } from "./schema";
+import { migrationsFolder, REQUIRED_TABLES, type SchemaStatus } from "./schema-status";
 
 export { DatabaseConfigError } from "./errors";
 export { isDemoMode } from "./mode";
 export * from "./schema";
+export {
+  collectErrorText,
+  isSchemaMissingError,
+  publicDatabaseError,
+  SCHEMA_MISSING_MESSAGE,
+} from "./schema-status";
 
 function createSql() {
   return neon(readDatabaseUrl());
@@ -60,4 +67,41 @@ export async function pingDatabase() {
     throw new Error("Neon PostgreSQL javobi kutilganidek emas");
   }
   return true;
+}
+
+export async function inspectSchema(): Promise<SchemaStatus> {
+  const rows = (await getSql()`
+    select table_name
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name in ('shops', 'sales', 'expenses', 'employees', 'salary_payments')
+  `) as Array<{ table_name: string }>;
+  const present = new Set(rows.map((row) => row.table_name));
+  const missing = REQUIRED_TABLES.filter((table) => !present.has(table));
+  return { ready: missing.length === 0, missing: [...missing] };
+}
+
+let migratePromise: Promise<void> | null = null;
+
+async function runMigrateIfNeeded() {
+  const status = await inspectSchema();
+  if (status.ready) return;
+  const { migrate } = await import("drizzle-orm/neon-http/migrator");
+  await migrate(getDb(), { migrationsFolder: migrationsFolder() });
+}
+
+export async function ensureMigrated() {
+  if (isDemoMode()) return;
+  if (!migratePromise) {
+    migratePromise = runMigrateIfNeeded().catch((error) => {
+      migratePromise = null;
+      throw error;
+    });
+  }
+  await migratePromise;
+}
+
+export async function readyDb() {
+  await ensureMigrated();
+  return getDb();
 }

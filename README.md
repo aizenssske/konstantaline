@@ -142,8 +142,8 @@ Random secret yaratish:
 openssl rand -hex 32
 ```
 
-5. Avval `npm run db:migrate` ni Neon direct URL bilan ishga tushiring, so‘ng deploy qiling.
-6. `/api/health` manzili `{"status":"ok","database":"neon"}` qaytarishini tekshiring.
+5. Vercel deploy `npm run db:migrate` ni avtomatik ishga tushiradi va jadvallarni yaratadi. Lokalda ham xuddi shu buyruqni ishlatish mumkin.
+6. `/api/health` manzili `{"status":"ok","database":"neon","schema":"ready"}` qaytarishini tekshiring.
 
 Database sozlanmasa tizim demo rejimga o‘tmaydi — aniq konfiguratsiya xatosi qaytadi. Demo rejim faqat `DEMO_MODE=true` bo‘lganda yoqiladi.
 
