@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: moliya-telegram-bot
+    runtime: python
+    plan: free
+    rootDir: bot
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: WEB_API_URL
+        sync: false
+      - key: BOT_API_SECRET
+        sync: false
+      - key: ALLOWED_TELEGRAM_IDS
+        sync: false
+      - key: WEBHOOK_BASE_URL
+        sync: false
+      - key: WEBHOOK_SECRET
+        generateValue: true
