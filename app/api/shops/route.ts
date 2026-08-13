@@ -3,7 +3,7 @@ import { apiError } from "@/lib/api-response";
 import { createShop, listShops } from "@/lib/repository";
 import { requireApiAuth } from "@/lib/route-auth";
 import { shopSchema } from "@/lib/schemas";
-import { isDemoMode } from "@/lib/supabase";
+import { isDemoMode } from "@/lib/db";
 
 export async function GET(request: Request) {
   const denied = await requireApiAuth(request);
